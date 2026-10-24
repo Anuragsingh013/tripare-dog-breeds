@@ -1,14 +1,26 @@
-﻿import * as SQLite from 'expo-sqlite';
+﻿import { Platform } from 'react-native';
+import * as SQLite from 'expo-sqlite';
 import { Breed, Group, BreedImage } from '../types';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
-export async function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (!db) {
-    db = await SQLite.openDatabaseAsync('dogbreeds.db');
-    await initSchema(db);
+// In-memory fallback for Web or environments without native SQLite
+let memBreeds: Breed[] = [];
+let memGroups: Group[] = [];
+let memMeta: Record<string, string> = {};
+
+export async function getDb(): Promise<SQLite.SQLiteDatabase | null> {
+  if (Platform.OS === 'web') return null;
+  try {
+    if (!db) {
+      db = await SQLite.openDatabaseAsync('dogbreeds.db');
+      await initSchema(db);
+    }
+    return db;
+  } catch (e) {
+    console.warn('SQLite unavailable, using fallback', e);
+    return null;
   }
-  return db;
 }
 
 async function initSchema(database: SQLite.SQLiteDatabase): Promise<void> {
@@ -69,10 +81,14 @@ async function initSchema(database: SQLite.SQLiteDatabase): Promise<void> {
   `);
 }
 
-// ─── Groups ──────────────────────────────────────────────────────────────────
+// Groups
 
 export async function saveGroups(groups: Group[]): Promise<void> {
   const database = await getDb();
+  if (!database) {
+    memGroups = [...groups];
+    return;
+  }
   await database.withTransactionAsync(async () => {
     for (const g of groups) {
       await database.runAsync(
@@ -85,16 +101,23 @@ export async function saveGroups(groups: Group[]): Promise<void> {
 
 export async function loadGroups(): Promise<Group[]> {
   const database = await getDb();
+  if (!database) {
+    return memGroups;
+  }
   const rows = await database.getAllAsync<{ id: string; name: string }>(
     'SELECT id, name FROM groups ORDER BY name'
   );
   return rows;
 }
 
-// ─── Breeds ──────────────────────────────────────────────────────────────────
+// Breeds
 
 export async function saveBreeds(breeds: Breed[]): Promise<void> {
   const database = await getDb();
+  if (!database) {
+    memBreeds = [...breeds];
+    return;
+  }
   await database.withTransactionAsync(async () => {
     for (const b of breeds) {
       await database.runAsync(
@@ -163,6 +186,9 @@ function rowToBreed(row: Record<string, unknown>): Breed {
 
 export async function loadAllBreeds(): Promise<Breed[]> {
   const database = await getDb();
+  if (!database) {
+    return memBreeds;
+  }
   const rows = await database.getAllAsync<Record<string, unknown>>(
     'SELECT * FROM breeds ORDER BY name'
   );
@@ -171,6 +197,9 @@ export async function loadAllBreeds(): Promise<Breed[]> {
 
 export async function loadBreedById(id: string): Promise<Breed | null> {
   const database = await getDb();
+  if (!database) {
+    return memBreeds.find((b) => b.id === id) ?? null;
+  }
   const row = await database.getFirstAsync<Record<string, unknown>>(
     'SELECT * FROM breeds WHERE id = ?',
     [id]
@@ -180,16 +209,22 @@ export async function loadBreedById(id: string): Promise<Breed | null> {
 
 export async function getBreedsCount(): Promise<number> {
   const database = await getDb();
+  if (!database) {
+    return memBreeds.length;
+  }
   const row = await database.getFirstAsync<{ count: number }>(
     'SELECT COUNT(*) as count FROM breeds'
   );
   return row?.count ?? 0;
 }
 
-// ─── Sync metadata ───────────────────────────────────────────────────────────
+// Sync metadata
 
 export async function getSyncMeta(key: string): Promise<string | null> {
   const database = await getDb();
+  if (!database) {
+    return memMeta[key] ?? null;
+  }
   const row = await database.getFirstAsync<{ value: string }>(
     'SELECT value FROM sync_meta WHERE key = ?',
     [key]
@@ -199,6 +234,10 @@ export async function getSyncMeta(key: string): Promise<string | null> {
 
 export async function setSyncMeta(key: string, value: string): Promise<void> {
   const database = await getDb();
+  if (!database) {
+    memMeta[key] = value;
+    return;
+  }
   await database.runAsync(
     'INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)',
     [key, value]

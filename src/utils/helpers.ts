@@ -11,8 +11,7 @@ export function deriveSizeCategory(attrs: ApiBreed['attributes']): SizeCategory 
 
 /**
  * Derive coat length from grooming score & shedding.
- * This is a heuristic since the API doesn't expose a "coat_length" field directly.
- * High grooming + high shedding → long; low grooming → short; wire terriers → wire (detected via name).
+ * Wire terriers detected via name keywords.
  */
 export function deriveCoatLength(breed: ApiBreed): CoatLength {
   const name = breed.attributes.name.toLowerCase();
@@ -25,6 +24,39 @@ export function deriveCoatLength(breed: ApiBreed): CoatLength {
   if (score <= 2) return 'short';
   if (score <= 3.5) return 'medium';
   return 'long';
+}
+
+/** Safely formats origin field which can be a string or { country, region, era } object in API */
+export function formatOrigin(val: unknown): string | null {
+  if (!val) return null;
+  if (typeof val === 'string') {
+    const s = val.trim();
+    return s.length > 0 ? s : null;
+  }
+  if (typeof val === 'object') {
+    const obj = val as Record<string, unknown>;
+    const parts = [obj.country, obj.region, obj.era]
+      .filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
+    return parts.length > 0 ? parts.join(', ') : null;
+  }
+  return String(val);
+}
+
+/** Safely formats other names which can be a string or array */
+export function formatOtherNames(val: unknown): string | null {
+  if (!val) return null;
+  if (typeof val === 'string') {
+    const s = val.trim();
+    return s.length > 0 ? s : null;
+  }
+  if (Array.isArray(val)) {
+    return val.filter(Boolean).join(', ') || null;
+  }
+  if (typeof val === 'object') {
+    const parts = Object.values(val as Record<string, unknown>).filter((v) => typeof v === 'string');
+    return parts.length > 0 ? parts.join(', ') : null;
+  }
+  return String(val);
 }
 
 /** Map raw API breed to normalised app Breed */
@@ -41,9 +73,9 @@ export function normaliseBreed(
     id: apiBreed.id,
     name: attrs.name,
     description: attrs.description ?? '',
-    temperament: attrs.temperament ?? null,
-    otherNames: attrs.other_names ?? null,
-    origin: attrs.origin ?? attrs.country_of_origin ?? null,
+    temperament: typeof attrs.temperament === 'string' ? attrs.temperament : (Array.isArray(attrs.temperament) ? (attrs.temperament as string[]).join(', ') : null),
+    otherNames: formatOtherNames(attrs.other_names),
+    origin: formatOrigin(attrs.origin ?? attrs.country_of_origin),
     lifeMin: attrs.life?.min ?? 0,
     lifeMax: attrs.life?.max ?? 0,
     maleWeightMin: attrs.male_weight?.min ?? 0,

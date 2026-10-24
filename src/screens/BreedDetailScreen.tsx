@@ -11,6 +11,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { useBreedStore } from '../store/breedStore';
 import { TraitBar } from '../components/breed/TraitBar';
 import { Colors, Typography, Spacing, Radius } from '../utils/theme';
+import { formatOrigin, formatOtherNames } from '../utils/helpers';
 import { BreedsStackParamList } from '../types';
 
 type RouteType = RouteProp<BreedsStackParamList, 'BreedDetail'>;
@@ -55,6 +56,11 @@ export const BreedDetailScreen: React.FC = () => {
   }
 
   const heroImage = breed.images[0]?.medium ?? breed.images[0]?.large;
+  const originStr = formatOrigin(breed.origin) ?? 'Unknown';
+  const otherNamesStr = formatOtherNames(breed.otherNames);
+  const temperamentStr = typeof breed.temperament === 'string'
+    ? breed.temperament
+    : (Array.isArray(breed.temperament) ? (breed.temperament as string[]).join(', ') : null);
 
   const renderOverview = () => (
     <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
@@ -66,7 +72,7 @@ export const BreedDetailScreen: React.FC = () => {
       {/* Key stats */}
       <Section title="Quick Stats">
         <View style={styles.statsGrid}>
-          <StatCard icon="🌍" label="Origin" value={breed.origin ?? 'Unknown'} />
+          <StatCard icon="🌍" label="Origin" value={originStr} />
           <StatCard icon="⌛" label="Lifespan" value={`${breed.lifeMin}-${breed.lifeMax} years`} />
           <StatCard icon="✨" label="Hypoallergenic" value={breed.hypoallergenic ? 'Yes ✓' : 'No'} />
           <StatCard icon="⚖️" label="Size" value={breed.sizeCategory.charAt(0).toUpperCase() + breed.sizeCategory.slice(1)} />
@@ -95,10 +101,10 @@ export const BreedDetailScreen: React.FC = () => {
       </Section>
 
       {/* Temperament */}
-      {breed.temperament && (
+      {temperamentStr && (
         <Section title="Temperament">
           <View style={styles.tagRow}>
-            {breed.temperament.split(',').map((t, i) => (
+            {temperamentStr.split(',').map((t, i) => (
               <View key={i} style={styles.tag}>
                 <Text style={styles.tagText}>{t.trim()}</Text>
               </View>
@@ -108,9 +114,9 @@ export const BreedDetailScreen: React.FC = () => {
       )}
 
       {/* Other names */}
-      {breed.otherNames && (
+      {otherNamesStr && (
         <Section title="Also Known As">
-          <Text style={styles.otherNames}>{breed.otherNames}</Text>
+          <Text style={styles.otherNames}>{otherNamesStr}</Text>
         </Section>
       )}
 
@@ -273,13 +279,24 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
   </View>
 );
 
-const StatCard: React.FC<{ icon: string; label: string; value: string }> = ({ icon, label, value }) => (
-  <View style={styles.statCard}>
-    <Text style={styles.statIcon}>{icon}</Text>
-    <Text style={styles.statLabel}>{label}</Text>
-    <Text style={styles.statValue}>{value}</Text>
-  </View>
-);
+const StatCard: React.FC<{ icon: string; label: string; value: unknown }> = ({ icon, label, value }) => {
+  let display = 'Unknown';
+  if (value !== null && value !== undefined) {
+    if (typeof value === 'object') {
+      const parts = Object.values(value as Record<string, unknown>).filter(Boolean);
+      display = parts.length > 0 ? parts.join(', ') : 'Unknown';
+    } else {
+      display = String(value);
+    }
+  }
+  return (
+    <View style={styles.statCard}>
+      <Text style={styles.statIcon}>{icon}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue}>{display}</Text>
+    </View>
+  );
+};
 
 const Row: React.FC<{ label: string; values: string[]; isHeader?: boolean }> = ({
   label, values, isHeader
